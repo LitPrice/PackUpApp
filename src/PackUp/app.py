@@ -119,6 +119,10 @@ class PackUp(toga.App):
         def clean_data(widget):
             try:
                 os.remove(self.data_path)
+                self.datas = {
+                    "重要物品": [],
+                    "杂物": []
+                }
                 self.main_window.confirm_dialog("通过", "删除成功!")
             except:
                 self.main_window.confirm_dialog("错误", "删除失败!")

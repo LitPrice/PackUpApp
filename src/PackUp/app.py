@@ -2,7 +2,6 @@
 My first application
 """
 import toga
-from toga.style import Pack
 from toga.style.pack import COLUMN, ROW
 
 import os
@@ -60,6 +59,45 @@ class PackUp(toga.App):
                 for item in self.datas[key]:
                     f.write(f"{key} {item}\n")
 
+    def send_mail(self, widget):
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.application import MIMEApplication
+
+        # 163 mail url
+        mail_host = 'smtp.163.com'
+        # 163 username
+        mail_user = "hujh960215@163.com"
+        # secret
+        # 163 auth，WIYIVGRXSZKNIIZM
+        mail_pass = 'WIYIVGRXSZKNIIZM'
+        # send and recieve mail
+        sender = 'hujh960215@163.com'
+        receivers = ['hujh960215@163.com']
+
+        message = MIMEMultipart()
+        message['Subject'] = 'PackUp text'
+        message['From'] = sender
+        message['To'] = receivers[0]
+
+        # attachment
+        with open(self.data_path, 'rb') as f:
+            attachment = MIMEApplication(f.read(), _subtype='txt')
+            attachment.add_header('Content-Disposition', 'attachment', filename='data.txt')
+            message.attach(attachment)
+
+        #
+        try:
+            # smtpObj.connect(mail_host,25)
+            smtpObj = smtplib.SMTP_SSL(mail_host)
+            smtpObj.login(mail_user, mail_pass)
+            smtpObj.sendmail(
+                sender,receivers,message.as_string())
+            smtpObj.quit()
+            self.main_window.confirm_dialog("通过", "邮件发送成功!")
+        except smtplib.SMTPException as e:
+            self.main_window.confirm_dialog("错误", f"{e}")
+
     def main_page(self):
         main_box = toga.Box()
 
@@ -86,16 +124,21 @@ class PackUp(toga.App):
                 self.main_window.confirm_dialog("错误", "删除失败!")
 
         button = toga.Button("物品列表", on_press=self.list_page)
+        button_send = toga.Button("发送邮件", on_press=self.send_mail)
         button_clean = toga.Button("清空", on_press=clean_data)
         # button.style.padding = (0, 50, 0, 50)
         # button.style.flex = 1
         main_box.add(button)
+        main_box.add(button_send)
         main_box.add(button_clean)
 
         main_box.style.update(direction=COLUMN)
+        button_clean.style.update(padding=(50, 0, 0, 0))
         return main_box
 
     def list_page(self, widget):
+        # 可滑动的窗口
+        scroll_view = toga.ScrollContainer()
         list_box = toga.Box()
 
         def return_main(widget):
@@ -115,7 +158,9 @@ class PackUp(toga.App):
                 list_box.add(item_label)
             list_box.add(toga.Label(""))
         list_box.style.update(direction=COLUMN)
-        self.main_window.content = list_box
+
+        scroll_view.content = list_box
+        self.main_window.content = scroll_view
 
 
 def main():

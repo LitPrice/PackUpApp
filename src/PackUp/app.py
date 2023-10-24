@@ -5,6 +5,7 @@ import toga
 from toga.style.pack import COLUMN, ROW
 
 import os
+import sqlite3
 from functools import partial
 
 
@@ -13,7 +14,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 
 class PackUp(toga.App):
 
-    data_path = os.path.join(ROOT, "data.txt")
+    data_path = os.path.join(ROOT, "data.db")
     
     def startup(self):
         """
@@ -23,8 +24,20 @@ class PackUp(toga.App):
         We then create a main window (with a name matching the app), and
         show the main window.
         """
-        # initialize
-        self.datas = self.load_datas()
+        # initialize database
+        conn = sqlite3.connect(self.data_path)
+        database = conn.cursor()
+        flag_table = database.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'META'")
+        for flag in flag_table:
+            exist_table = flag[0]
+        if exist_table == 0:
+            database.execute('''CREATE TABLE META
+                    (ID INT PRIMARY KEY     NOT NULL,
+                    TYPE           TEXT    NOT NULL,
+                    NAME           TEXT    NOT NULL);''')
+            conn.commit()
+        conn.close()
+             
 
         self.main_window = toga.MainWindow(title=self.formal_name)
         self.main_window.content = self.main_page()
@@ -32,32 +45,55 @@ class PackUp(toga.App):
 
     def load_datas(self):
         datas = {
-            "重要物品": [],
-            "杂物": []
+            "重要物品": {
+                "max_idx": 0
+            },
+            "杂物": {
+                "max_idx": 0
+            }
         }
-        if os.path.exists(self.data_path):
-            with open(self.data_path, "r") as f:
-                metas = f.readlines()
-                for meta in metas:
-                    mtype, mname = meta.strip().split(" ")
-                    datas[mtype].append(mname)
+        # if os.path.exists(self.data_path):
+        #     with open(self.data_path, "r") as f:
+        #         metas = f.readlines()
+        #         for meta in metas:
+        #             mtype, mname = meta.strip().split(" ")
+        #             datas[mtype].append(mname)
+        conn = sqlite3.connect(self.data_path)
+        database = conn.cursor()
+        cursor = database.execute("SELECT ID, TYPE, NAME from META")
+        for row in cursor:
+            idx, dtype, name = row[0], row[1], row[2]
+            datas[dtype][name] = idx
+            if idx > datas[dtype]["max_idx"]:
+                datas[dtype]["max_idx"] = idx
+        conn.close()
         return datas
 
     def add_handler(self, widget, type, name):
+        datas = self.load_datas()
         type_text = type.value
         name_text = name.value
 
         if len(name_text) == 0:
             self.main_window.confirm_dialog("错误", "填入物品为空")
-        elif name_text in self.datas[type_text]:
+        elif name_text in datas[type_text]:
             self.main_window.confirm_dialog("错误", "物品已存在")
         else:
-            self.datas[type_text].append(name_text)
+            datas[type_text][name_text] = datas[type_text]["max_idx"] + 1
+            datas[type_text]["max_idx"] += 1
             self.main_window.confirm_dialog("通过", "添加成功!")
-        with open(self.data_path, "w", encoding='utf-8') as f:
-            for key in self.datas:
-                for item in self.datas[key]:
-                    f.write(f"{key} {item}\n")
+
+        conn = sqlite3.connect(self.data_path)
+        database = conn.cursor()
+        database.execute(f"INSERT INTO META (ID,TYPE,NAME) \
+                              VALUES ({datas[type_text][name_text]}, '{type_text}', '{name_text}')")
+        conn.commit()
+        conn.close()
+        # os.remove(self.data_path)
+        # with open(self.data_path, "w", encoding='utf-8') as f:
+        #     for key in datas:
+        #         for item in datas[key]:
+        #             f.write(f"{key} {item}\n")
 
     def send_mail(self, widget):
         import smtplib
@@ -65,14 +101,14 @@ class PackUp(toga.App):
         from email.mime.application import MIMEApplication
 
         # 163 mail url
-        mail_host = 'smtp.163.com'
-        # 163 username
+        mail_host = 'smtp.163.com'  
+        # 163 username 
         mail_user = "hujh960215@163.com"
         # secret
         # 163 auth，WIYIVGRXSZKNIIZM
         mail_pass = 'WIYIVGRXSZKNIIZM'
         # send and recieve mail
-        sender = 'hujh960215@163.com'
+        sender = 'hujh960215@163.com'  
         receivers = ['hujh960215@163.com']
 
         message = MIMEMultipart()
@@ -82,8 +118,8 @@ class PackUp(toga.App):
 
         # attachment
         with open(self.data_path, 'rb') as f:
-            attachment = MIMEApplication(f.read(), _subtype='txt')
-            attachment.add_header('Content-Disposition', 'attachment', filename='data.txt')
+            attachment = MIMEApplication(f.read(), _subtype='db')
+            attachment.add_header('Content-Disposition', 'attachment', filename='data.db')
             message.attach(attachment)
 
         #
@@ -119,10 +155,6 @@ class PackUp(toga.App):
         def clean_data(widget):
             try:
                 os.remove(self.data_path)
-                self.datas = {
-                    "重要物品": [],
-                    "杂物": []
-                }
                 self.main_window.confirm_dialog("通过", "删除成功!")
             except:
                 self.main_window.confirm_dialog("错误", "删除失败!")
@@ -154,11 +186,13 @@ class PackUp(toga.App):
         datas = self.load_datas()
         for key in datas:
             items = datas[key]
-            key_label = toga.Label(f"{key} {len(items)}项")
+            key_label = toga.Label(f"{key} {len(items) - 1}项")
             key_label.style.update(font_weight='bold', color='#ff0000')
             list_box.add(key_label)
-            for idx in range(len(items)):
-                item_label = toga.Label(f"idx {idx}: " + items[idx])
+            for item in items:
+                if item == "max_idx":
+                    continue
+                item_label = toga.Label(f"idx {items[item]}: " + item)
                 list_box.add(item_label)
             list_box.add(toga.Label(""))
         list_box.style.update(direction=COLUMN)
